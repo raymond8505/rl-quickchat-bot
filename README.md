@@ -4,7 +4,7 @@ Discord bot that replies in threads with the most relevant Rocket League quickch
 
 ## Status
 
-The bot replies with a quickchat when it is `@mentioned` in a channel or thread. It pulls up to `HISTORY_LIMIT` previous messages as context and asks Gemini to pick the most fitting quickchat from the static catalog. Scoring / prompt-tuning is the next iteration.
+The bot replies with a quickchat when it is `@mentioned` in a channel or thread. It pulls up to `CONTEXT_LIMIT` previous messages as context and asks Gemini to pick the most fitting quickchat from the static catalog. Scoring / prompt-tuning is the next iteration.
 
 ## Setup
 
@@ -68,9 +68,68 @@ src/
 └─ agent/
    ├─ graph.ts       # LangGraph StateGraph + validateQuickchat()
    ├─ model.ts       # ChatGoogleGenerativeAI factory
-   ├─ prompt.ts      # system prompt (placeholder — tuned next)
+   ├─ prompt.ts      # two-step prompts: sincere draft → catalog mapping
    └─ quickchats.ts  # static RL quickchat catalog + FALLBACK
 ```
+
+## Editing the quickchat catalog
+
+The catalog is a static `readonly` array in [src/agent/quickchats.ts](src/agent/quickchats.ts). Each entry has this shape:
+
+```ts
+export type Category =
+  | "Information"
+  | "Compliments"
+  | "Reactions"
+  | "Apologies"
+  | "PostGame";
+
+export interface Quickchat {
+  category: Category;
+  text: string;       // exact in-game string
+  useCases: string[]; // sincere situational descriptions
+}
+```
+
+Example entry:
+
+```ts
+{
+  category: "Information",
+  text: "I got it!",
+  useCases: [
+    "Stepping forward when there's a thing to be handled",
+    "Claiming the next move before anyone else",
+    "Volunteering for whatever's in front of you",
+  ],
+},
+```
+
+**To add a quickchat**, append a new object to the `QUICKCHATS` array. Two rules that matter:
+
+- `text` must be the **exact** in-game quickchat string — that is what gets sent to Discord.
+- `useCases` should be **3+ sincere situational descriptions**, phrased away from Rocket League jargon. The model treats these as ground truth when matching a real conversation moment to a quickchat — abstract, sincere descriptions match more unexpected moments than literal in-game ones do.
+
+The array is `as const`, so the `category` field must match the `Category` union. After editing, run:
+
+```sh
+yarn test
+```
+
+[src/agent/quickchats.test.ts](src/agent/quickchats.test.ts) checks for empty `text`, empty `useCases`, and duplicate entries — so a busted entry fails locally instead of silently breaking the agent.
+
+The catalog is rendered into the mapping prompt by [src/agent/prompt.ts](src/agent/prompt.ts) and consumed by the `mapToQuickchat` node in [src/agent/graph.ts](src/agent/graph.ts).
+
+## Editing the prompts
+
+Both LLM prompts live as inline string constants in [src/agent/prompt.ts](src/agent/prompt.ts) — there are no separate `.md`/`.txt` template files.
+
+| Constant                   | What it does                                                                                                                                                                       |
+| -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `SINCERE_RESPONSE_PROMPT`  | **Step 1**: Gemini drafts a natural one-sentence teammate reply, ignoring the quickchat catalog entirely. Tuning this changes the bot's *voice*.                                   |
+| `QUICKCHAT_MAPPING_PROMPT` | **Step 2**: Gemini picks the single closest entry from the catalog (interpolated via `${QUICKCHAT_LIST}`). Tuning this changes how the sincere draft gets *snapped* to a quickchat. |
+
+Both are passed as `SystemMessage`s on the corresponding LLM invocations in [src/agent/graph.ts](src/agent/graph.ts). Edit, save, and `yarn dev` picks the changes up on next mention.
 
 ## CodeGraph
 
