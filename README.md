@@ -4,7 +4,12 @@ Discord bot that replies in threads with the most relevant Rocket League quickch
 
 ## Status
 
-The bot replies with a quickchat when it is `@mentioned` in a channel or thread. It pulls up to `CONTEXT_LIMIT` previous messages as context and asks Gemini to pick the most fitting quickchat from the static catalog. Scoring / prompt-tuning is the next iteration.
+The bot replies with a quickchat when it is `@mentioned` in a channel or thread. It pulls up to `CONTEXT_LIMIT` previous messages as context, generates a sincere reply to the thread based on its voice, then maps that reply to a quick chat
+
+ex:
+> User: @RL-Quickchat-Bot I almost dropped my milk... but then I caught it!
+> LLM Sincere: good catch!
+> Mapped Quickchat: What a save!
 
 ## Setup
 
